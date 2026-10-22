@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  gst-reco:
+    build: .
+    container_name: gst_reconciliation_app
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist SQLite DB and generated Excel exports on host machine
+      - ./storage:/app/storage
+    restart: unless-stopped
