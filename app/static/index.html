@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GST 2B & Tally Book Reconciliation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="navbar">
+            <div class="brand">
+                <div class="logo-icon">📊</div>
+                <div>
+                    <h1>GST & Tally Reconciliation</h1>
+                    <p class="tagline">Automated Matching • 4-Sheet Excel Generator • Offline SQLite Storage</p>
+                </div>
+            </div>
+            <div class="nav-actions">
+                <span class="badge-offline">⚡ Local & Offline</span>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" id="tab-btn-reco" onclick="switchTab('reco')">New Reconciliation</button>
+            <button class="tab-btn" id="tab-btn-history" onclick="switchTab('history')">Past Months History (Offline DB)</button>
+        </div>
+
+        <!-- TAB 1: NEW RECONCILIATION -->
+        <section id="tab-reco" class="tab-content active">
+            <!-- Upload Card -->
+            <div class="card upload-card">
+                <div class="card-header">
+                    <h2>Upload Source Sheets</h2>
+                    <span class="info-text">Upload GSTR-2B Excel & Tally Purchase Register to generate complete reconciliation</span>
+                </div>
+
+                <div class="period-input-group">
+                    <label for="periodLabel"><strong>Reconciliation Period / Month:</strong></label>
+                    <input type="text" id="periodLabel" placeholder="e.g. August 2025 or April 2025" value="August 2025">
+                </div>
+
+                <div class="dropzones-container">
+                    <!-- Dropzone 1: GSTR-2B -->
+                    <div class="dropzone" id="dz-2b" onclick="document.getElementById('file2b').click()">
+                        <div class="dz-icon">📥</div>
+                        <h3>GSTR-2B Excel File</h3>
+                        <p class="dz-sub">Drag & drop or click to browse</p>
+                        <div class="file-info" id="file-info-2b">No file chosen</div>
+                        <input type="file" id="file2b" accept=".xlsx, .xls" style="display:none" onchange="handleFileSelect('2b', this)">
+                    </div>
+
+                    <!-- Dropzone 2: Book / Tally -->
+                    <div class="dropzone" id="dz-book" onclick="document.getElementById('fileBook').click()">
+                        <div class="dz-icon">📒</div>
+                        <h3>Tally Book (Purchase Register)</h3>
+                        <p class="dz-sub">Drag & drop or click to browse</p>
+                        <div class="file-info" id="file-info-book">No file chosen</div>
+                        <input type="file" id="fileBook" accept=".xlsx, .xls" style="display:none" onchange="handleFileSelect('book', this)">
+                    </div>
+                </div>
+
+                <div class="action-footer">
+                    <button id="btn-reconcile" class="btn btn-primary" onclick="startReconciliation()">
+                        <span id="btn-text">⚡ Run Automated Reconciliation</span>
+                        <div id="loader" class="spinner hidden"></div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results Section (Hidden until processed) -->
+            <div id="results-section" class="results-container hidden">
+                <!-- Action Banner -->
+                <div class="success-banner">
+                    <div>
+                        <h3 id="reco-result-title">Reconciliation Completed Successfully!</h3>
+                        <p id="reco-result-subtitle">All 5 sheets generated with formulas & duplicate invoices separated.</p>
+                    </div>
+                    <a id="btn-download" href="#" class="btn btn-download">
+                        📥 Download Reconciliation Excel (.xlsx)
+                    </a>
+                </div>
+
+                <!-- KPI Metric Cards -->
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Total Invoices</div>
+                        <div class="metric-val" id="m-total">0</div>
+                    </div>
+                    <div class="metric-card success">
+                        <div class="metric-label">Fully Matched</div>
+                        <div class="metric-val" id="m-matched">0</div>
+                    </div>
+                    <div class="metric-card warning">
+                        <div class="metric-label">Mismatched</div>
+                        <div class="metric-val" id="m-mismatched">0</div>
+                    </div>
+                    <div class="metric-card info">
+                        <div class="metric-label">Only in Book</div>
+                        <div class="metric-val" id="m-only-book">0</div>
+                    </div>
+                    <div class="metric-card info">
+                        <div class="metric-label">Only in GSTR-2B</div>
+                        <div class="metric-val" id="m-only-2b">0</div>
+                    </div>
+                    <div class="metric-card warning">
+                        <div class="metric-label">Duplicates Separated</div>
+                        <div class="metric-val" id="m-duplicate">0</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Net Tax Difference (₹)</div>
+                        <div class="metric-val" id="m-tax-diff">0.00</div>
+                    </div>
+                </div>
+
+                <!-- Vendor GST-Wise Reco Summary Table -->
+                <div class="card table-card">
+                    <div class="card-header table-header">
+                        <h2>GSTIN-Wise Reconciliation Summary (Sheet 4 Preview)</h2>
+                        <div class="filter-group">
+                            <label>Filter Status:</label>
+                            <select id="statusFilter" onchange="filterSummaryTable()">
+                                <option value="ALL">All Vendors</option>
+                                <option value="MATCH">Matched</option>
+                                <option value="MISMATCH">Mismatched / Discrepancies</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="summaryTable">
+                            <thead>
+                                <tr>
+                                    <th>Supplier GSTIN</th>
+                                    <th>Book Taxable (₹)</th>
+                                    <th>Book Tax (₹)</th>
+                                    <th>2B Taxable (₹)</th>
+                                    <th>2B Tax (₹)</th>
+                                    <th>Diff Taxable (₹)</th>
+                                    <th>Diff Tax (₹)</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="summaryTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: OFFLINE HISTORY -->
+        <section id="tab-history" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Offline Reconciliation History</h2>
+                    <span class="info-text">Re-download past 1-2 month old reports anytime from SQLite storage</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Period</th>
+                                <th>Processed Date</th>
+                                <th>2B Source File</th>
+                                <th>Book Source File</th>
+                                <th>Invoices</th>
+                                <th>Matched</th>
+                                <th>Mismatched</th>
+                                <th>Tax Diff</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <tr>
+                                <td colspan="9" style="text-align:center; padding: 2rem;">Loading history...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
